@@ -10,6 +10,7 @@ import {
   deleteSelectedThreadEntries,
   getFallbackThreadIdAfterDelete,
   hasUnseenCompletion,
+  limitedThreadResumeRunId,
   resolveSidebarRowThreadId,
   orderItemsByPreferredIds,
   pinOrderKeyBetween,
@@ -42,7 +43,14 @@ import {
 } from "@t3tools/client-runtime/state/thread-sort";
 import { resolveProjectExpanded } from "../uiStateStore";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { EnvironmentId, ProjectId, ProviderInstanceId, RunId, ThreadId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProjectId,
+  ProviderInstanceId,
+  RunId,
+  RuntimeRequestId,
+  ThreadId,
+} from "@t3tools/contracts";
 
 import {
   DEFAULT_INTERACTION_MODE,
@@ -309,6 +317,33 @@ describe("resolveSidebarThreadStatus", () => {
         runtime: { ...runtime, status: "idle" as const, lastError: "persisted" },
       }),
     ).toBe("waiting");
+  });
+});
+
+describe("limitedThreadResumeRunId", () => {
+  const limited = {
+    status: "failed" as const,
+    lastErrorClass: "usage_limit" as const,
+    latestRunId: RunId.make("run-limited"),
+    pendingRuntimeRequest: null,
+  };
+
+  it("resumes only a usage-limited failure with nothing pending", () => {
+    expect(limitedThreadResumeRunId(limited)).toBe(RunId.make("run-limited"));
+    expect(limitedThreadResumeRunId({ ...limited, lastErrorClass: "provider_error" })).toBeNull();
+    expect(limitedThreadResumeRunId({ ...limited, status: "interrupted" })).toBeNull();
+    expect(limitedThreadResumeRunId({ ...limited, status: "running" })).toBeNull();
+    expect(limitedThreadResumeRunId({ ...limited, latestRunId: null })).toBeNull();
+    expect(
+      limitedThreadResumeRunId({
+        ...limited,
+        pendingRuntimeRequest: {
+          id: RuntimeRequestId.make("request-1"),
+          kind: "permission",
+          createdAt: DateTime.makeUnsafe("2026-03-09T10:00:00.000Z"),
+        },
+      }),
+    ).toBeNull();
   });
 });
 

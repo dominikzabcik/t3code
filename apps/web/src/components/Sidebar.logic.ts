@@ -20,6 +20,8 @@ import {
   isListedThreadLineage,
   type ContextMenuItem,
   type EnvironmentId,
+  type OrchestrationV2ThreadShell,
+  type RunId,
   type ThreadId,
 } from "@t3tools/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
@@ -636,6 +638,19 @@ export function buildBulkUnpinContextMenuItem(input: {
 }): ContextMenuItem<"unpin"> | null {
   if (input.pinnedCount === 0) return null;
   return { id: "unpin", label: `Unpin (${input.pinnedCount})` };
+}
+
+export function limitedThreadResumeRunId(
+  thread: Pick<
+    OrchestrationV2ThreadShell,
+    "status" | "lastErrorClass" | "latestRunId" | "pendingRuntimeRequest"
+  >,
+): RunId | null {
+  return thread.status === "failed" &&
+    thread.lastErrorClass === "usage_limit" &&
+    thread.pendingRuntimeRequest === null
+    ? thread.latestRunId
+    : null;
 }
 
 export interface ThreadStatusPill {

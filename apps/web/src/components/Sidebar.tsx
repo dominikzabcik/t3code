@@ -103,7 +103,7 @@ import { isPreviewFocused } from "../lib/previewFocus";
 import { isModelPickerOpen } from "../modelPickerVisibility";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
-import { isMacPlatform } from "~/lib/utils";
+import { isMacPlatform, newMessageId } from "~/lib/utils";
 import { readLocalApi } from "../localApi";
 import { configuredHostedAppUrl } from "../hostedPairing";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
@@ -169,7 +169,7 @@ import {
   resolveActiveThreadRouteRef,
   resolveThreadRouteTarget,
 } from "../threadRoutes";
-import type { SidebarThreadSummary } from "../types";
+import { DEFAULT_INTERACTION_MODE, type SidebarThreadSummary } from "../types";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { cn } from "~/lib/utils";
 import { ProjectEnvironmentBadge } from "./ProjectEnvironmentBadge";
@@ -191,6 +191,7 @@ import {
   firstValidTimestampMs,
   isSidebarNestedLinkClick,
   isTrailingDoubleClick,
+  limitedThreadResumeRunId,
   orderItemsByPreferredIds,
   planSidebarThreadDrop,
   reduceSidebarProjectScopeMenuState,
@@ -934,6 +935,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     deleteThread,
   } = useThreadActions();
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
+    reportFailure: false,
+  });
+  const startThreadTurn = useOrchestrationCommand(threadEnvironment.startTurn, {
     reportFailure: false,
   });
   const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
@@ -2310,6 +2314,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       const pinnedSelectedThreads = selectedThreads.filter(
         (thread) => serverConfigs.has(thread.environmentId) && thread.pinnedAt != null,
       );
+      const limitedResumes = selectedThreads.flatMap((thread) => {
+        const runId = limitedThreadResumeRunId(thread.source);
+        return runId === null ? [] : [{ thread, runId }];
+      });
+      const limitedThreads = limitedResumes.map(({ thread }) => thread);
       const unpinMenuItem = buildBulkUnpinContextMenuItem({
         pinnedCount: pinnedSelectedThreads.length,
       });
@@ -2323,6 +2332,15 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       const clicked = await settlePromise(() =>
         api.contextMenu.show(
           [
+            ...(limitedResumes.length > 0
+              ? [
+                  {
+                    id: "resume",
+                    label: `Resume (${limitedResumes.length})`,
+                    disabled: !canOperateThreads(limitedThreads),
+                  },
+                ]
+              : []),
             ...(unpinMenuItem
               ? [{ ...unpinMenuItem, disabled: !canOperateThreads(pinnedSelectedThreads) }]
               : []),
@@ -2378,16 +2396,18 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       const actionTargets =
         clicked.value === "unpin"
           ? pinnedSelectedThreads
-          : clicked.value === "regenerate-title"
-            ? regeneratableTitleThreads
-            : clicked.value === "settle"
-              ? settlingThreads.flatMap((thread) => {
-                  const current = threadByKeyRef.current.get(
-                    scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-                  );
-                  return current && current.settledOverride !== "settled" ? [current] : [];
-                })
-              : selectedThreads;
+          : clicked.value === "resume"
+            ? limitedThreads
+            : clicked.value === "regenerate-title"
+              ? regeneratableTitleThreads
+              : clicked.value === "settle"
+                ? settlingThreads.flatMap((thread) => {
+                    const current = threadByKeyRef.current.get(
+                      scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+                    );
+                    return current && current.settledOverride !== "settled" ? [current] : [];
+                  })
+                : selectedThreads;
       if (clicked.value === "settle" && actionTargets.length === 0) return;
       if (clicked.value !== "mark-unread" && !checkThreadOperations(actionTargets)) return;
       if (clicked.value?.startsWith("snooze:")) {
@@ -2431,6 +2451,44 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               }),
             );
           }
+        }
+        return;
+      }
+      if (clicked.value === "resume") {
+        clearSelection();
+        const results = await Promise.all(
+          limitedResumes.map(({ thread, runId }) =>
+            startThreadTurn({
+              environmentId: thread.environmentId,
+              input: {
+                threadId: thread.id,
+                manualContinuationOfRunId: runId,
+                message: {
+                  messageId: newMessageId(),
+                  role: "user",
+                  text: "Continue where you left off.",
+                  attachments: [],
+                },
+                runtimeMode: thread.runtimeMode,
+                interactionMode: DEFAULT_INTERACTION_MODE,
+                dispatchMode: "start",
+              },
+            }),
+          ),
+        );
+        const failures = results.flatMap((result) =>
+          result._tag === "Failure" && !isAtomCommandInterrupted(result) ? [result] : [],
+        );
+        const firstFailure = failures[0];
+        if (firstFailure !== undefined) {
+          const error = squashAtomCommandFailure(firstFailure);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: `Failed to resume ${failures.length} thread${failures.length === 1 ? "" : "s"}`,
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
         }
         return;
       }

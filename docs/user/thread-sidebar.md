@@ -250,7 +250,9 @@ keeps the provider's explanation. Retry after the limit resets, or switch to
 another provider instance.
 Press **Resume** in an empty composer to continue a limited or interrupted turn
 manually. Do this when the provider reports no reset time, because nothing
-continues the turn on its own.
+continues the turn on its own. On web and desktop, select multiple threads and
+choose **Resume** from their context menu to continue the selected limited threads
+together. Other selected threads are left alone.
 Queued messages stay saved while the limit blocks the thread. They run after
 the continuation finishes. If the queue was held by a restart, resume it then.
 
