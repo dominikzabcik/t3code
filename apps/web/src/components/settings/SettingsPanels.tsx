@@ -103,7 +103,7 @@ import {
   SettingsSection,
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
-import { BackgroundActivitySettingsRow } from "./BackgroundActivitySettings";
+import { BackgroundActivitySettingsRow, KeepAwakeSettingsRow } from "./BackgroundActivitySettings";
 import { AdvancedSettings } from "./AdvancedSettings";
 import { PullRequestLinksOpenInAppSetting } from "./IntegrationsSettings";
 import { StorageCleanupSections } from "./StorageSettings";
@@ -2026,6 +2026,7 @@ export function MaintenanceSettingsPanel() {
 
       <SettingsSection id="background" title="Background activity">
         <BackgroundActivitySettingsRow />
+        <KeepAwakeSettingsRow />
       </SettingsSection>
 
       <StorageCleanupSections />
