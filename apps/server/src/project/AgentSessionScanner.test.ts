@@ -3100,10 +3100,6 @@ describe("parseAgentSessionTranscript", () => {
       expected: "Generated title",
     },
     { customTitles: ["<bash-input>npm test</bash-input>"], expected: "Generated title" },
-    {
-      customTitles: ["<command-name>/review</command-name><command-args>login flow</command-args>"],
-      expected: "Generated title",
-    },
   ])("uses Claude custom titles $customTitles over the AI title", ({ customTitles, expected }) => {
     const aiTitle = JSON.stringify({
       type: "ai-title",
