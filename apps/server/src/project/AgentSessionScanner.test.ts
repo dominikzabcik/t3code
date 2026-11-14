@@ -2425,15 +2425,25 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
             content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "ok" }],
           },
         });
+        // Claude Code's own command output is not a message and must not take a history slot.
+        const commandOutput = record({
+          type: "user",
+          message: {
+            role: "user",
+            content: "<local-command-stdout>Compacted</local-command-stdout>",
+          },
+        });
         yield* writeTranscript({
           filePath: path.join(claudeHomePath, "projects", "-slug", "long-session.jsonl"),
           contents: [
             record({ type: "attachment", cwd: workspace, aiTitle: "Old title" }),
+            commandOutput,
             record({ type: "user", message: { role: "user", content: "First prompt" } }),
             record({
               type: "assistant",
               message: { role: "assistant", model: "claude-opus-5-5", content: "First reply" },
             }),
+            ...Array.from({ length: 200 }, () => commandOutput),
             // Small tool records exceed the real 32 MiB selected-history budget in aggregate.
             ...Array.from({ length: 20_000 }, () => toolResult),
             record({ type: "user", message: { role: "user", content: "Latest prompt" } }),

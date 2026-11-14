@@ -743,12 +743,8 @@ function shouldRetainDecodedRecord(
     if (isHiddenClaudeRecord(record) || (record.type !== "user" && record.type !== "assistant")) {
       return false;
     }
-    const content = record.message?.content;
-    return typeof content === "string"
-      ? content.trim().length > 0
-      : (content?.some(
-          (block) => isTextContentBlock(block) && (block.text?.trim().length ?? 0) > 0,
-        ) ?? false);
+    // Same rule as the parser, so Claude Code's own output never takes a history window slot.
+    return claudeVisibleText(record).text.length > 0;
   }
   if (extractDecodedCwd(record) !== null) return true;
   return (
